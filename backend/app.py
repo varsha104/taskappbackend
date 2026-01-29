@@ -94,6 +94,12 @@ def health():
         return f"DB ERROR: {e}", 500
 
 # ================= LOGIN =================
+@app.route("/", methods=["GET"])
+def home():
+    return {
+        "message": "TaskApp Backend is running",
+        "status": "OK"
+    }
 
 @app.route("/", methods=["GET", "POST"])
 def login():
