@@ -1,6 +1,0 @@
-Flask
-Flask-SQLAlchemy
-Flask-Bcrypt
-Flask-CORS
-gunicorn
-psycopg2-binary
