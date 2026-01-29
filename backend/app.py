@@ -25,7 +25,7 @@ app.secret_key = os.environ.get("SECRET_KEY", "secret123")
 
 # ================= DATABASE CONFIG =================
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
+DATABASE_URL = "postgresql://task_app_database_user:6e9Aht8E6353ue8LvgtUF8E3X6OmcOiU@dpg-d5tf83i4d50c73c4tlh0-a.oregon-postgres.render.com/task_app_database"
 
 if not DATABASE_URL:
     # Use SQLite for local development
@@ -412,4 +412,5 @@ def logout():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
