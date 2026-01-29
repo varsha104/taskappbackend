@@ -101,7 +101,7 @@ def home():
         "status": "OK"
     }
 
-@app.route("/", methods=["GET", "POST"])
+@app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         role = request.form["role"]
@@ -412,3 +412,4 @@ def logout():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
