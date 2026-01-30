@@ -244,7 +244,7 @@ def admin():
                     priority=request.form["priority"],
                     deadline=request.form["deadline"],
                     user_id=uid,
-                    admin_id=["admin_id"],
+                    admin_id=admin_id,
                 )
                 db.session.add(task)
 
@@ -419,6 +419,7 @@ def logout():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
 
