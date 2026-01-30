@@ -2,10 +2,11 @@ from flask import Flask, request, session, jsonify
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
-from datetime import datetime
+from datetime import datetime, timedelta
+import jwt
 import re
 import os
-
+from functools import wraps
 # ================= BASE DIRECTORY FIX (CRITICAL) =================
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -87,6 +88,61 @@ class Task(db.Model):
 with app.app_context():
     db.create_all()
 
+# ================= JWT TOKEN HELPERS =================
+
+def generate_token(user_id, name, email, is_admin):
+    """Generate JWT token"""
+    payload = {
+        'user_id': user_id,
+        'name': name,
+        'email': email,
+        'is_admin': is_admin,
+        'exp': datetime.utcnow() + timedelta(hours=24)
+    }
+    token = jwt.encode(payload, app.secret_key, algorithm='HS256')
+    return token
+
+def token_required(f):
+    """Decorator to check if JWT token is valid"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        
+        # Check for token in headers
+        if 'Authorization' in request.headers:
+            auth_header = request.headers['Authorization']
+            try:
+                token = auth_header.split(" ")[1]
+            except IndexError:
+                return jsonify({"success": False, "message": "Invalid token format"}), 401
+        
+        if not token:
+            return jsonify({"success": False, "message": "Token is missing"}), 401
+        
+        try:
+            data = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+            request.user = data
+        except jwt.ExpiredSignatureError:
+            return jsonify({"success": False, "message": "Token has expired"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"success": False, "message": "Invalid token"}), 401
+        
+        return f(*args, **kwargs)
+    
+    return decorated
+
+
+def admin_required(f):
+    """Decorator to check if user is admin"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not request.user.get('is_admin'):
+            return jsonify({"success": False, "message": "Admin access required"}), 403
+        
+        return f(*args, **kwargs)
+    
+    return decorated
+
 # ================= HEALTH CHECK =================
 
 @app.route("/health")
@@ -118,13 +174,14 @@ def login():
         ).first()
 
         if user and bcrypt.check_password_hash(user.password, password):
-            session.clear()
-            session["name"] = user.fname
-            session["user_id"] = user.id
+            # Generate JWT token
+            token = generate_token(
+                user_id=user.id,
+                name=user.fname,
+                email=user.email,
+                is_admin=user.is_admin
+            )
 
-            if role == "admin":
-                session["admin"] = True
-                session["admin_id"] = user.id
 
             return jsonify({
                 "success": True,
@@ -133,7 +190,7 @@ def login():
                     "id": user.id,
                     "name": user.fname,
                     "email": user.email,
-                    "role": "admin" if role == "admin" else "user"
+                    "role": "admin" if user.is_admin else "user"
                 }
             }), 200
 
@@ -227,9 +284,10 @@ def forgot():
 # ================= ADMIN DASHBOARD =================
 
 @app.route("/admin", methods=["GET", "POST"])
+@token_required
+@admin_required
 def admin():
-    if not session.get("admin"):
-        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    admin_id = request.user['user_id']
 
     users = User.query.filter_by(is_admin=False).all()
 
@@ -241,7 +299,7 @@ def admin():
                     priority=request.form["priority"],
                     deadline=request.form["deadline"],
                     user_id=uid,
-                    admin_id=session["admin_id"],
+                    admin_id=admin_id,
                 )
                 db.session.add(task)
 
@@ -257,7 +315,7 @@ def admin():
                 "message": str(e)
             }), 400
 
-    tasks = Task.query.filter_by(admin_id=session["admin_id"]).all()
+    tasks = Task.query.filter_by(admin_id=admin_id).all()
     
     return jsonify({
         "success": True,
@@ -282,13 +340,14 @@ def admin():
 # ================= EDIT TASK =================
 
 @app.route("/edit_task/<int:id>", methods=["GET", "POST"])
+@token_required
+@admin_required
 def edit_task(id):
-    if not session.get("admin"):
-        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    admin_id = request.user['user_id']
 
     task = Task.query.get_or_404(id)
 
-    if task.admin_id != session.get("admin_id"):
+    if task.admin_id != admin_id:
         return jsonify({"success": False, "message": "Unauthorized access"}), 403
 
     if request.method == "GET":
@@ -324,13 +383,14 @@ def edit_task(id):
 # ================= DELETE TASK =================
 
 @app.route("/delete_task/<int:id>")
+@token_required
+@admin_required
 def delete_task(id):
-    if not session.get("admin"):
-        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    admin_id = request.user['user_id']
 
     task = Task.query.get_or_404(id)
 
-    if task.admin_id != session.get("admin_id"):
+    if task.admin_id != admin_id:
         return jsonify({"success": False, "message": "Unauthorized action"}), 403
 
     try:
@@ -350,15 +410,14 @@ def delete_task(id):
 # ================= USER DASHBOARD =================
 
 @app.route("/dashboard")
+@token_required
 def dashboard():
-    if "user_id" not in session:
-        return jsonify({"success": False, "message": "Unauthorized"}), 401
-
-    tasks = Task.query.filter_by(user_id=session["user_id"]).all()
+    user_id = request.user['user_id']
+    tasks = Task.query.filter_by(user_id=user_id).all()
     
     return jsonify({
         "success": True,
-        "user_name": session.get("name", ""),
+        "user_name": request.user.get("name", ""),
         "tasks": [{
             "id": t.id,
             "title": t.title,
@@ -372,13 +431,13 @@ def dashboard():
 # ================= MARK TASK DONE =================
 
 @app.route("/done/<int:id>")
+@token_required
 def done(id):
-    if "user_id" not in session:
-        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    user_id = request.user['user_id']
 
     task = Task.query.get_or_404(id)
 
-    if task.user_id != session.get("user_id"):
+    if task.user_id != user_id:
         return jsonify({"success": False, "message": "Unauthorized"}), 403
 
     try:
