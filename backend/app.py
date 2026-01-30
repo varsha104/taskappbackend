@@ -186,6 +186,7 @@ def login():
             return jsonify({
                 "success": True,
                 "message": "Login successful",
+                "token": token,
                 "user": {
                     "id": user.id,
                     "name": user.fname,
@@ -475,6 +476,7 @@ def logout():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
 
