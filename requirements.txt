@@ -5,3 +5,4 @@ Flask-CORS
 PyJWT
 gunicorn
 psycopg2-binary
+pytz

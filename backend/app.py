@@ -7,6 +7,7 @@ import jwt
 import re
 import os
 from functools import wraps
+from pytz import timezone
 # ================= BASE DIRECTORY FIX (CRITICAL) =================
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -182,10 +183,10 @@ def login():
                 is_admin=user.is_admin
             )
 
-
             return jsonify({
                 "success": True,
                 "message": "Login successful",
+                "token": token,
                 "user": {
                     "id": user.id,
                     "name": user.fname,
@@ -442,7 +443,9 @@ def done(id):
 
     try:
         task.status = "Done"
-        task.completed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Get current time in IST (Indian Standard Time)
+        ist = timezone('Asia/Kolkata')
+        task.completed_at = datetime.now(ist).strftime("%Y-%m-%d %H:%M:%S")
         db.session.commit()
         
         return jsonify({
